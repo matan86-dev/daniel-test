@@ -655,9 +655,10 @@ function renderQ(){
   const pct=Math.round(100*(QZ.i+(answered?1:0))/QZ.qs.length);
   let opts='';
   if(q.kind==='mc'){
-    opts=`<div class="opts">${q.options.map((o,i)=>{let cl='';if(answered){if(i===q.correct)cl='good';else if(i===a.given)cl='wrong'}else if(a&&a.given===i)cl='sel';return `<button class="opt ${cl}" data-i="${i}" ${answered?'disabled':''}><span class="l">${LET[i]}</span><span>${o}</span></button>`}).join('')}</div>`;
+    const tried=(!timed&&a&&a.tries)||[];
+    opts=`<div class="opts">${q.options.map((o,i)=>{let cl='',dis=answered;if(answered){if(i===q.correct)cl='good';else if(tried.includes(i))cl='wrong'}else if(tried.includes(i)){cl='wrong';dis=true}else if(timed&&a&&a.given===i)cl='sel';return `<button class="opt ${cl}" data-i="${i}" ${dis?'disabled':''}><span class="l">${LET[i]}</span><span>${o}</span></button>`}).join('')}</div>`;
   }else{
-    opts=`<div class="numin"><input id="numA" ${TOUCH?'readonly inputmode="none"':'inputmode="numeric"'} autocomplete="off" value="${a&&a.given!=null?esc(a.given):''}" ${answered?'disabled':''} aria-label="התשובה">${timed||answered?'':'<button class="btn" id="chk">בדיקה</button>'}</div>
+    opts=`<div class="numin"><input id="numA" ${TOUCH?'readonly inputmode="none"':'inputmode="numeric"'} autocomplete="off" value="${timed&&a&&a.given!=null?esc(a.given):answered&&a.given!=null?esc(a.given):''}" ${answered?'disabled':''} aria-label="התשובה">${timed||answered?'':'<button class="btn" id="chk">בדיקה</button>'}</div>
     ${answered?'':`<div class="pad">${[1,2,3,4,5,6,7,8,9,0].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button data-k="del" style="grid-column:span 5">⌫ מחיקה</button></div>`}`;
   }
   app.innerHTML=`<section class="card">
@@ -666,7 +667,7 @@ function renderQ(){
    <div class="qtext">${q.q}</div>
    ${opts}
    ${!timed&&!answered&&q.hint?(QZ.showHint?`<div class="hintbox">💡 ${q.hint}</div>`:`<div style="margin-top:10px"><button class="btn ghost small" id="hint">💡 רמז</button></div>`):''}
-   <div id="fb">${answered?feedback(q,a):''}</div>
+   <div id="fb">${answered?feedback(q,a):(!timed&&a&&a.tries&&a.tries.length?tryAgain(q,a):'')}</div>
    <div class="row between" style="margin-top:16px">
      ${timed?`<button class="btn ghost" id="prev" ${QZ.i===0?'disabled':''}>→ הקודמת</button><button class="btn" id="next">${QZ.i===QZ.qs.length-1?'סיום ✓':'הבאה ←'}</button>`:
      answered?`<span></span><button class="btn" id="next">${QZ.i===QZ.qs.length-1?'לתוצאות 🎉':'לשאלה הבאה ←'}</button>`:`<button class="btn ghost small" id="quit">יציאה</button><span></span>`}
@@ -680,6 +681,8 @@ function renderQ(){
     app.querySelectorAll('.pad button').forEach(b=>b.onclick=()=>{const k=b.dataset.k;ni.value=k==='del'?ni.value.slice(0,-1):(ni.value+k).slice(0,5);if(timed)QZ.ans[QZ.i]={given:ni.value}});
     if(!TOUCH)ni.focus();}
   const ck=$('#chk');if(ck)ck.onclick=submitNum;
+  const wb=$('#whyBtn');if(wb)wb.onclick=()=>{a.showWhy=true;renderQ()};
+  const sa=$('#showAns');if(sa)sa.onclick=reveal;
   const h=$('#hint');if(h)h.onclick=()=>{QZ.showHint=true;renderQ()};
   const nx=$('#next');if(nx)nx.onclick=nextQ;
   const pv=$('#prev');if(pv)pv.onclick=()=>{trackTime();QZ.i--;renderQ()};
@@ -691,9 +694,17 @@ function renderQ(){
 function submitNum(){const v=$('#numA').value.trim();if(v==='')return toast('כתבי מספר');answer(v)}
 function isRight(q,g){return q.kind==='mc'?g===q.correct:(g!==''&&g!=null&&Number(g)===Number(q.answer))}
 function answer(g){
-  const q=QZ.qs[QZ.i];trackTime();const ok=isRight(q,g);QZ.ans[QZ.i]={given:g,ok,locked:true};QZ.showHint=false;
-  if(ok)confetti();renderQ();
+  const q=QZ.qs[QZ.i];const a=QZ.ans[QZ.i]||(QZ.ans[QZ.i]={tries:[]});if(a.locked)return;a.tries=a.tries||[];
+  if(isRight(q,g)){trackTime();a.locked=true;a.solved=true;a.ok=a.tries.length===0;a.given=a.tries.length?a.tries[0]:g;QZ.showHint=false;confetti()}
+  else{if(a.tries.some(t=>String(t)===String(g)))return toast('את זה כבר ניסית 🙂');a.tries.push(g);a.showWhy=false;a.msg=pick(['לא בדיוק… נסי שוב! 💪','כמעט! תני לזה עוד ניסיון 🙂','זו לא התשובה – נסי שוב, את יכולה!','עוד לא… חשבי שוב ונסי 🤔'])}
+  renderQ();
 }
+function reveal(){const a=QZ.ans[QZ.i]||(QZ.ans[QZ.i]={tries:[]});if(a.locked)return;trackTime();a.locked=true;a.revealed=true;a.ok=false;a.given=a.tries&&a.tries.length?a.tries[a.tries.length-1]:null;QZ.showHint=false;renderQ()}
+function whyText(q,g){if(q.kind==='mc')return (q.why&&q.why[g])||`התשובה "${q.options[g]}" לא מתאימה לנתונים שבשאלה.`;const m=(q.mistakes||[]).find(m=>m.v===Number(g));return m?m.msg:`${eq(esc(g))} זה לא המספר הנכון. כדאי לבדוק: מה הפעולה שהשאלה מבקשת?`}
+function tryAgain(q,a){const g=a.tries[a.tries.length-1];const lbl=q.kind==='mc'?LET[g]:eq(esc(g));
+  return `<div class="fb bad"><div class="head">${a.msg||'נסי שוב!'}</div>${a.tries.length>1?`<div class="small muted">ניסיונות: ${a.tries.length}</div>`:''}
+  ${a.showWhy?`<div class="why"><b>${q.kind==='mc'?'בחרת':'כתבת'} ${lbl} – למה זה לא נכון?</b><br>${whyText(q,g)}</div>`:''}
+  <div class="row" style="margin-top:8px">${a.showWhy?'':'<button class="btn ghost small" id="whyBtn">🤔 למה זה לא נכון?</button>'}<button class="btn ghost small" id="showAns">👀 הראה תשובה</button></div></div>`}
 function nextQ(){
   if(QZ.mode==='timed'){trackTime();if(QZ.i<QZ.qs.length-1){QZ.i++;renderQ()}else{const left=QZ.ans.filter(a=>!a||a.given==null||a.given==='').length;confirmBox(left?`נשארו ${left} שאלות בלי תשובה. להגיש בכל זאת?`:'להגיש את המבחן?',()=>finishQuiz(false))}return}
   if(QZ.i<QZ.qs.length-1){QZ.i++;QZ.qStart=Date.now();renderQ()}else finishQuiz(false);
@@ -702,11 +713,10 @@ const PRAISE=()=>pick([`כל הכבוד, ${CH()}! 🎉`,'מעולה! חשבת נ
 const ENC=()=>pick(['כמעט! בואי נבין יחד 💡','לא נורא – ככה לומדים 💪','טעות היא חלק מהלמידה. הנה ההסבר:','זו שאלה מבלבלת! בואי נראה איך חושבים עליה:']);
 function feedback(q,a){
   const given=a.given;
-  if(a.ok)return `<div class="fb ok"><div class="head">${PRAISE()}</div><div class="exp"><b>איך חושבים על זה:</b><br>${q.explain}</div></div>`;
+  if(a.ok||a.solved)return `<div class="fb ok"><div class="head">${a.ok?PRAISE():`נכון! הצלחת בניסיון ה-${(a.tries||[]).length+1} 👏`}</div><div class="exp"><b>איך חושבים על זה:</b><br>${q.explain}</div></div>`;
   let why=null;
   if(given==null||given==='')why='לא נבחרה תשובה.';
-  else if(q.kind==='mc')why=(q.why&&q.why[given])||`התשובה "${q.options[given]}" לא מתאימה לנתונים שבשאלה. ההסבר למטה מראה את הדרך.`;
-  else{const m=(q.mistakes||[]).find(m=>m.v===Number(given));why=m?m.msg:`${eq(esc(given))} זה לא המספר הנכון. כדאי לבדוק: מה הפעולה שהשאלה מבקשת?`}
+  else why=whyText(q,given);
   const right=q.kind==='mc'?`${LET[q.correct]}. ${q.options[q.correct]}`:eq(q.answer);
   return `<div class="fb bad"><div class="head">${ENC()}</div>
    ${given!=null&&given!==''?`<div class="why"><b>${q.kind==='mc'?`בחרת ${LET[given]}`:`כתבת ${eq(esc(given))}`} – למה זה לא נכון?</b><br>${why}</div>`:`<div class="why">${why}</div>`}
@@ -742,7 +752,7 @@ function renderResults(idx,total,correct,used,timeout){
   app.innerHTML=`<section class="card"><div class="score">
     <div class="ring" style="background:conic-gradient(var(--accent) ${pct*3.6}deg,var(--soft) 0)"><div style="width:100px;height:100px;border-radius:50%;background:#fff;display:grid;place-items:center"><span style="direction:ltr;unicode-bidi:isolate">${pct}%</span></div></div>
     <div><div class="stars">${'⭐'.repeat(stars)}${'☆'.repeat(3-stars)}</div><h2 style="margin:4px 0">${msg}</h2>
-    <div class="muted">${correct} נכונות מתוך ${total} · זמן: <span class="eq">${fmtTime(used)}</span>${total?` · בממוצע <span class="eq">${Math.round(used/total)}</span> שניות לשאלה`:''}${timeout?' · ⏰ הזמן נגמר':''}</div></div></div>
+    <div class="muted">${correct} נכונות ${QZ.mode==='timed'?'':'מהניסיון הראשון '}מתוך ${total} · זמן: <span class="eq">${fmtTime(used)}</span>${total?` · בממוצע <span class="eq">${Math.round(used/total)}</span> שניות לשאלה`:''}${timeout?' · ⏰ הזמן נגמר':''}${(()=>{const r=idx.filter(i=>QZ.ans[i].solved&&!QZ.ans[i].ok).length;return r?` · עוד ${r} נפתרו בניסיון נוסף 💪`:''})()}</div></div></div>
    ${total?`<h3>לפי נושא</h3><table><tr><th>נושא</th><th class="num">נכון</th><th class="num">%</th></tr>${Object.entries(cats).map(([c,[o,t]])=>`<tr><td>${CATS[c]?.ic||''} ${CATS[c]?.name||c}</td><td class="num">${o}/${t}</td><td class="num">${Math.round(100*o/t)}%</td></tr>`).join('')}</table>`:''}
    ${wrong.length?`<h3>בואי נלמד מהטעויות (${wrong.length})</h3>${wrong.map(i=>{const q=QZ.qs[i],a=QZ.ans[i];return `<details class="rev" ${QZ.mode==='timed'?'':''}><summary>שאלה ${i+1} · ${CATS[q.cat]?.name||''}</summary>${q.passage?`<details><summary class="small muted">הצגת הקטע</summary>${renderPassage(q.passage)}</details>`:''}<div class="qtext" style="font-size:18px">${q.q}</div>${q.kind==='mc'?`<div class="small">${q.options.map((o,j)=>`<div>${LET[j]}. ${o}${j===q.correct?' ✅':''}${j===a.given?' ⬅️ התשובה שלך':''}</div>`).join('')}</div>`:''}${feedback(q,a)}</details>`}).join('')}`:total?'<p>אין טעויות בכלל! 🎉</p>':''}
    <div class="row" style="margin-top:16px"><button class="btn" id="again">עוד סבב</button><button class="btn ghost" id="prog">להתקדמות</button><button class="btn ghost" id="home">לבית</button></div></section>`;

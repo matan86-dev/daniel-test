@@ -171,7 +171,7 @@ function fmt(t){ // plain text (custom questions) -> safe html with isolated mat
 }
 
 /* ================= state & storage ================= */
-const DEF={child:'נועה',uncle:'דוד רון',sibs:[{name:'יואב',g:'m'},{name:'תמר',g:'f'},{name:'איתי',g:'m'}],hobbies:['שחייה','ריקוד'],songs:['יום הולדת שמח'],foods:['פיצה','תותים'],age:7};
+const DEF={child:'דניאל',uncle:'דוד רון',sibs:[{name:'יואב',g:'m'},{name:'תמר',g:'f'},{name:'איתי',g:'m'}],hobbies:['שחייה','ריקוד'],songs:['יום הולדת שמח'],foods:['פיצה','תותים'],age:7};
 const ST={settings:JSON.parse(JSON.stringify(DEF)),custom:[],results:[],mistakes:[]};
 const Store={
   db:null,mode:'local',chain:Promise.resolve(),
@@ -203,9 +203,9 @@ const Store={
 function toast(msg){const d=document.createElement('div');d.className='tip';d.style.cssText='display:block;bottom:20px;left:50%;transform:translateX(-50%);font-size:16px';d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 
 /* ================= people ================= */
-function P(){const s=ST.settings;return{child:{name:s.child||'נועה',g:'f'},dad:{name:'אבא',g:'m'},mom:{name:'אמא',g:'f'},uncle:{name:s.uncle||'דוד רון',g:'m'},sibs:(s.sibs||[]).filter(x=>x.name)}}
+function P(){const s=ST.settings;return{child:{name:s.child||'דניאל',g:'f'},dad:{name:'אבא',g:'m'},mom:{name:'אמא',g:'f'},uncle:{name:s.uncle||'דוד רון',g:'m'},sibs:(s.sibs||[]).filter(x=>x.name)}}
 const kids=()=>{const p=P();return [p.child,...p.sibs]};
-const sibsOnly=()=>{const p=P();return p.sibs.length?p.sibs:[{name:'נועה',g:'f'},{name:'איתי',g:'m'}]};
+const sibsOnly=()=>{const p=P();return p.sibs.length?p.sibs:[{name:'דניאל',g:'f'},{name:'איתי',g:'m'}]};
 const adults=()=>{const p=P();return [p.dad,p.mom,p.uncle]};
 const everyone=()=>[...kids(),...adults()];
 const hobby=()=>pick(ST.settings.hobbies?.length?ST.settings.hobbies:['ריקוד']);
@@ -818,7 +818,7 @@ SCREENS.settings=()=>{
   $('#back').onclick=()=>go('home');
   $('#save').onclick=async()=>{
     const list=v=>v.split(/[,،]/).map(x=>x.trim()).filter(Boolean);
-    ST.settings={...ST.settings,child:$('#child').value.trim()||'נועה',uncle:$('#uncle').value.trim()||'הדוד',sibs:[...app.querySelectorAll('#sibs .row')].map(r=>({name:r.querySelector('input').value.trim(),g:r.querySelector('select').value})).filter(x=>x.name),hobbies:list($('#hobbies').value),songs:list($('#songs').value),foods:list($('#foods').value),custom_set:true};
+    ST.settings={...ST.settings,child:$('#child').value.trim()||'דניאל',uncle:$('#uncle').value.trim()||'הדוד',sibs:[...app.querySelectorAll('#sibs .row')].map(r=>({name:r.querySelector('input').value.trim(),g:r.querySelector('select').value})).filter(x=>x.name),hobbies:list($('#hobbies').value),songs:list($('#songs').value),foods:list($('#foods').value),custom_set:true};
     await Store.saveSettings();setTitle();toast('נשמר ✓');go('home');
   };
 };

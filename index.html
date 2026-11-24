@@ -1043,6 +1043,16 @@ function officialQs(T){const qs=[];T.sections.forEach(S=>S.items.forEach(it=>{
   if(it.t==='num'){q.kind='num';q.answer=it.ans;q.check=it.check;q.answerText=it.txt;q.mistakes=it.m||[]}
   else{q.kind='mc';q.options=['','','',''];q.correct=it.a;q.why=[0,1,2,3].map(i=>i===it.a?null:((it.w||{})[i]||'כדאי לחזור לקטע או לשאלה ולבדוק שוב.'))}
   qs.push(q)}));return qs}
+const MORE_TESTS=[
+ {g:'של משרד החינוך',items:[
+  {n:'שאלות לדוגמה לשלב א\' (כיתות ב-ג)',s:'משרד החינוך',d:'דף הדוגמאות הרשמי, עם פתרונות בסוף',u:'https://meyda.education.gov.il/files/gifted/sinun_b-c_example_heb.pdf'},
+  {n:'קטע ושאלות לדוגמה – מבחן הסינון',s:'מכון הנרייטה סאלד (באתר משרד החינוך)',d:'הבנת הנקרא וחשבון',u:'https://meyda.education.gov.il/files/Owl/Hebrew/sald_eb.pdf'}]},
+ {g:'של מרכזי הכנה (חינם)',items:[
+  {n:'27 שאלות לדוגמה לשלב א\'',s:'גאונצ\'יק',d:'מסודרות לפי סוגי השאלות, עם פתרון מלא',u:'https://gaonchik.co.il/category/sample-questions/'},
+  {n:'שאלות לדוגמה לשלב א\'',s:'OpenGifted',d:'עם פתרון והסבר, באתר',u:'https://opengifted.com/stage-a'},
+  {n:'מבחני PDF לשלב א\' ושלב ב\'',s:'מטיק',d:'להורדה, כולל פתרונות',u:'https://matic.co.il/%D7%9E%D7%97%D7%95%D7%A0%D7%A0%D7%99%D7%9D-%D7%A9%D7%9C%D7%91-%D7%91/'},
+  {n:'מבחן מחוננים לדוגמה – PDF',s:'גאון שלי',d:'שלב א\' ושלב ב\'',u:'https://gaonshelima.co.il/gifted-test-example-pdf/'},
+  {n:'מבחנים לדוגמה לשלב ב\'',s:'מכון נועם',d:'לכיתות ב\', ג\' ו-ד\' (PDF) – רלוונטי אם עוברים לשלב ב\'',u:'https://www.machon-noam.co.il/%D7%9E%D7%91%D7%97%D7%A0%D7%99-%D7%9E%D7%97%D7%95%D7%A0%D7%A0%D7%99%D7%9D-%D7%A9%D7%9C%D7%91-%D7%91'}]}];
 SCREENS.official=()=>{
   const done=ST.results.filter(r=>r.mode==='official');
   app.innerHTML=`<section class="card"><h2>📄 מבחן רשמי</h2>
@@ -1051,6 +1061,9 @@ SCREENS.official=()=>{
     <div class="row" style="margin-top:10px"><a class="btn ghost small" href="${T.pdf}" target="_blank" rel="noopener">📄 פתיחת המבחן (PDF)</a></div>
     <div class="row" style="margin-top:10px"><label>זמן בדקות: <input type="number" class="omins" data-t="${T.id}" min="10" max="120" value="${T.mins}" style="width:90px;display:inline-block"></label><button class="btn pink" data-start="${T.id}">להתחיל – דף תשובות</button></div>
     <details class="small" style="margin-top:8px"><summary>להורים</summary>משך המבחן לא מצוין בקובץ הרשמי, אז אפשר לקבוע זמן לבד. <a href="${T.key}" target="_blank" rel="noopener">מפתח התשובות הרשמי</a> (כדאי לא להראות לפני הפתרון 🙂). ההסברים לטעויות נכתבו כאן, ואינם של משרד החינוך.</details></div>`}).join('')}
+   <h3>📚 עוד מבחנים לדוגמה</h3>
+   <p class="small muted">קישורים לאתרים חיצוניים, להדפסה או לפתרון שם. לחומרים האלה אין דף תשובות באתר שלנו – אם תרצו, אפשר לבנות אחד לשימוש ביתי.</p>
+   ${MORE_TESTS.map(G=>`<div class="small" style="font-weight:700;margin:10px 0 4px">${G.g}</div>${G.items.map(x=>`<a class="genq" href="${x.u}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;margin:6px 0"><b>${x.n}</b> <span class="small muted">· ${x.s}</span><div class="small muted">${x.d} ↗</div></a>`).join('')}`).join('')}
    <div class="row" style="margin-top:14px"><button class="btn ghost" id="back">לבית</button></div></section>`;
   $('#back').onclick=()=>go('home');
   app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{const T=OFFICIAL.find(t=>t.id===b.dataset.start);const m=Math.max(10,Math.min(120,+app.querySelector(`.omins[data-t="${T.id}"]`).value||T.mins));startOfficial(T,m)});

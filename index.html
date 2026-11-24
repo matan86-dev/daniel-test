@@ -815,12 +815,12 @@ function weakCats(){
 /* ================= screens ================= */
 let QZ=null,timerId=null;
 function stopTimer(){if(timerId){clearInterval(timerId);timerId=null}}
-const HASH={home:'home',practiceSetup:'practice',timedSetup:'timed',progress:'progress',addQ:'add-questions',settings:'family'};
+const HASH={home:'home',official:'official',practiceSetup:'practice',timedSetup:'timed',progress:'progress',addQ:'add-questions',settings:'family'};
 let curHash='';
 function setHash(h,replace){curHash=h;if((location.hash.slice(1)||'')===h)return;try{if(replace)history.replaceState(null,'','#'+h);else location.hash=h}catch(e){}}
 function go(screen,...a){stopTimer();window.scrollTo(0,0);setHash(HASH[screen]||'home');SCREENS[screen](...a)}
 const quizActive=()=>QZ&&!QZ.done&&curHash==='quiz';
-function leaveQuiz(target){confirmBox(QZ.mode==='timed'?'לצאת מהמבחן? המבחן לא יישמר.':'לצאת מהתרגול? התשובות עד עכשיו יישמרו בהתקדמות.',()=>{if(QZ.mode==='timed'){QZ.done=true;stopTimer();go(target)}else{finishQuiz(false,true,target)}})}
+function leaveQuiz(target){const noSave=QZ.mode==='timed'||QZ.mode==='official';confirmBox(noSave?'לצאת מהמבחן? המבחן לא יישמר.':'לצאת מהתרגול? התשובות עד עכשיו יישמרו בהתקדמות.',()=>{if(noSave){QZ.done=true;stopTimer();go(target)}else{finishQuiz(false,true,target)}})}
 window.addEventListener('hashchange',()=>{const h=location.hash.slice(1)||'home';if(h===curHash)return;const target=Object.keys(HASH).find(k=>HASH[k]===h)||'home';
   if(quizActive()){setHash('quiz');leaveQuiz(target);return}
   go(target)});
@@ -835,6 +835,7 @@ SCREENS.home=()=>{
   <div class="grid tiles">
     <button class="tile" data-go="practiceSetup"><span class="ic">🎯</span><b>תרגול</b><span>בוחרים נושאים, ואחרי כל שאלה מקבלים הסבר.</span></button>
     <button class="tile" data-go="timedSetup"><span class="ic">⏱️</span><b>מבחן על זמן</b><span>כמו במבחן האמיתי: שעון, בלי רמזים, ציון בסוף.</span></button>
+    <button class="tile" data-go="official"><span class="ic">📄</span><b>מבחן רשמי</b><span>המבחן האמיתי של משרד החינוך (תשפ"ה), עם בדיקה והסברים.</span></button>
     ${weak.length?`<button class="tile" data-smart="1"><span class="ic">🧠</span><b>תרגול חכם</b><span>מתמקדים במה שעוד קשה: ${weak.map(w=>CATS[w].name).join(', ')}.</span></button>`:''}
     <button class="tile" data-go="review" ${ST.mistakes.length?'':'disabled style="opacity:.55;cursor:default"'}><span class="ic">🔁</span><b>חזרה על טעויות</b><span>${ST.mistakes.length?`${ST.mistakes.length} שאלות שכדאי לנסות שוב.`:'עוד אין טעויות לחזור עליהן.'}</span></button>
     <button class="tile" data-go="progress"><span class="ic">📈</span><b>ההתקדמות שלי</b><span>${ST.results.length?`${ST.results.length} אימונים ומבחנים עד עכשיו.`:'כאן יופיעו הגרפים אחרי האימון הראשון.'}</span></button>
@@ -884,7 +885,7 @@ function startQuiz(mode,qs,limit){
   window.scrollTo(0,0);setHash('quiz');renderQ();
 }
 function elapsed(){return (Date.now()-QZ.t0)/1000}
-function tick(){if(!QZ||QZ.done)return stopTimer();const left=QZ.limit-elapsed();const el=$('#timer');if(el){el.textContent=fmtTime(left);el.classList.toggle('low',left<60)}if(left<=0){stopTimer();finishQuiz(true)}}
+function tick(){if(!QZ||QZ.done)return stopTimer();const left=QZ.limit-elapsed();const el=$('#timer');if(el){el.textContent=fmtTime(left);el.classList.toggle('low',left<60)}if(left<=0){stopTimer();QZ.mode==='official'?finishOfficial(true):finishQuiz(true)}}
 function trackTime(){QZ.secs[QZ.i]+=(Date.now()-QZ.qStart)/1000;QZ.qStart=Date.now()}
 
 function renderPassage(p){return `<div class="passage"><h4>${p.title}</h4>${p.lines.map((l,i)=>`<div class="pl"><span class="n">${i+1}</span><span>${l}</span></div>`).join('')}</div>`}
@@ -931,7 +932,7 @@ function renderQ(){
   if(answered){const f=$('#fb');f&&f.scrollIntoView({behavior:'smooth',block:'nearest'})}
 }
 function submitNum(){const v=$('#numA').value.trim();if(v==='')return toast('כתבי מספר');answer(v)}
-function isRight(q,g){return q.kind==='mc'?g===q.correct:(g!==''&&g!=null&&Number(g)===Number(q.answer))}
+function isRight(q,g){if(q.check)return g!==''&&g!=null&&q.check(Number(g));return q.kind==='mc'?g===q.correct:(g!==''&&g!=null&&Number(g)===Number(q.answer))}
 function answer(g){
   const q=QZ.qs[QZ.i];const a=QZ.ans[QZ.i]||(QZ.ans[QZ.i]={tries:[]});if(a.locked)return;a.tries=a.tries||[];
   if(isRight(q,g)){trackTime();a.locked=true;a.solved=true;a.ok=a.tries.length===0;a.given=a.tries.length?a.tries[0]:g;QZ.showHint=false;confetti()}
@@ -956,7 +957,7 @@ function feedback(q,a){
   let why=null;
   if(given==null||given==='')why='לא נבחרה תשובה.';
   else why=whyText(q,given);
-  const right=q.kind==='mc'?`${LET[q.correct]}. ${q.options[q.correct]}`:eq(q.answer);
+  const right=q.kind==='mc'?`${LET[q.correct]}${q.options[q.correct]?'. '+q.options[q.correct]:''}`:(q.answerText||eq(q.answer));
   return `<div class="fb bad"><div class="head">${ENC()}</div>
    ${given!=null&&given!==''?`<div class="why"><b>${q.kind==='mc'?`בחרת ${LET[given]}`:`כתבת ${eq(esc(given))}`} – למה זה לא נכון?</b><br>${why}</div>`:`<div class="why">${why}</div>`}
    <div><b>התשובה הנכונה:</b> ${right}</div>
@@ -991,13 +992,95 @@ function renderResults(idx,total,correct,used,timeout){
   app.innerHTML=`<section class="card"><div class="score">
     <div class="ring" style="background:conic-gradient(var(--accent) ${pct*3.6}deg,var(--soft) 0)"><div style="width:100px;height:100px;border-radius:50%;background:#fff;display:grid;place-items:center"><span style="direction:ltr;unicode-bidi:isolate">${pct}%</span></div></div>
     <div><div class="stars">${'⭐'.repeat(stars)}${'☆'.repeat(3-stars)}</div><h2 style="margin:4px 0">${msg}</h2>
-    <div class="muted">${correct} נכונות ${QZ.mode==='timed'?'':'מהניסיון הראשון '}מתוך ${total} · זמן: <span class="eq">${fmtTime(used)}</span>${total?` · בממוצע <span class="eq">${Math.round(used/total)}</span> שניות לשאלה`:''}${timeout?' · ⏰ הזמן נגמר':''}${(()=>{const r=idx.filter(i=>QZ.ans[i].solved&&!QZ.ans[i].ok).length;return r?` · עוד ${r} נפתרו בניסיון נוסף 💪`:''})()}</div></div></div>
+    <div class="muted">${correct} נכונות ${QZ.mode==='timed'||QZ.mode==='official'?'':'מהניסיון הראשון '}מתוך ${total} · זמן: <span class="eq">${fmtTime(used)}</span>${total?` · בממוצע <span class="eq">${Math.round(used/total)}</span> שניות לשאלה`:''}${timeout?' · ⏰ הזמן נגמר':''}${(()=>{const r=idx.filter(i=>QZ.ans[i].solved&&!QZ.ans[i].ok).length;return r?` · עוד ${r} נפתרו בניסיון נוסף 💪`:''})()}</div></div></div>
    ${total?`<h3>לפי נושא</h3><table><tr><th>נושא</th><th class="num">נכון</th><th class="num">%</th></tr>${Object.entries(cats).map(([c,[o,t]])=>`<tr><td>${CATS[c]?.ic||''} ${CATS[c]?.name||c}</td><td class="num">${o}/${t}</td><td class="num">${Math.round(100*o/t)}%</td></tr>`).join('')}</table>`:''}
-   ${wrong.length?`<h3>בואי נלמד מהטעויות (${wrong.length})</h3>${wrong.map(i=>{const q=QZ.qs[i],a=QZ.ans[i];return `<details class="rev" ${QZ.mode==='timed'?'':''}><summary>שאלה ${i+1} · ${CATS[q.cat]?.name||''}</summary>${q.passage?`<details><summary class="small muted">הצגת הקטע</summary>${renderPassage(q.passage)}</details>`:''}<div class="qtext" style="font-size:18px">${q.q}</div>${q.kind==='mc'?`<div class="small">${q.options.map((o,j)=>`<div>${LET[j]}. ${o}${j===q.correct?' ✅':''}${j===a.given?' ⬅️ התשובה שלך':''}</div>`).join('')}</div>`:''}${feedback(q,a)}</details>`}).join('')}`:total?'<p>אין טעויות בכלל! 🎉</p>':''}
+   ${wrong.length?`<h3>בואי נלמד מהטעויות (${wrong.length})</h3>${wrong.map(i=>{const q=QZ.qs[i],a=QZ.ans[i];return `<details class="rev" ${QZ.mode==='timed'?'':''}><summary>${q.official?`${q.sec} · ${q.label}`:`שאלה ${i+1} · ${CATS[q.cat]?.name||''}`}</summary>${q.passage?`<details><summary class="small muted">הצגת הקטע</summary>${renderPassage(q.passage)}</details>`:''}${q.official?'':`<div class="qtext" style="font-size:18px">${q.q}</div>`}${q.kind==='mc'?`<div class="small">${q.official?`התשובה שלך: <b>${a.given!=null?LET[a.given]:'—'}</b> · התשובה הנכונה: <b>${LET[q.correct]}</b>`:q.options.map((o,j)=>`<div>${LET[j]}. ${o}${j===q.correct?' ✅':''}${j===a.given?' ⬅️ התשובה שלך':''}</div>`).join('')}</div>`:''}${feedback(q,a)}</details>`}).join('')}`:total?'<p>אין טעויות בכלל! 🎉</p>':''}
    <div class="row" style="margin-top:16px"><button class="btn" id="again">עוד סבב</button><button class="btn ghost" id="prog">להתקדמות</button><button class="btn ghost" id="home">לבית</button></div></section>`;
   $('#home').onclick=()=>go('home');$('#prog').onclick=()=>go('progress');
-  $('#again').onclick=()=>go(QZ.mode==='timed'?'timedSetup':QZ.mode==='review'?'home':'practiceSetup');
+  $('#again').onclick=()=>go(QZ.mode==='timed'?'timedSetup':QZ.mode==='official'?'official':QZ.mode==='review'?'home':'practiceSetup');
   if(pct>=70)confetti();
+}
+
+/* ================= official tests (answer sheet only; the test itself stays on the Ministry site) ================= */
+const OFFICIAL=[{id:'sinun-2025',title:'מבחן הסינון הרשמי – כיתה ב׳, תשפ"ה',src:'משרד החינוך, האגף למחוננים ולמצטיינים',
+ pdf:'https://meyda.education.gov.il/files/Rama/gifted-students-heb-2025.pdf',key:'https://meyda.education.gov.il/files/Rama/mechvan-gifted-students-heb-2025.pdf',mins:45,
+ sections:[
+ {name:'הבנת הנקרא – "הטללית"',cat:'reading',items:[
+  {l:'שאלה 1',a:1,w:{0:'בקטע לא כתוב שיש לצמח שיניים.',2:'הקטע לא מספר שהטללית אוכלת צמחים אחרים.',3:'השם "טורף" לא קשור למראה של הצמח.'},ex:'צמח "טורף" הוא צמח שאוכל יצורים קטנים. הקטע מסביר שהטללית לוכדת חרקים וניזונה מהם – ולכן היא נקראת טורפת.'},
+  {l:'שאלה 2',a:1,w:{0:'הקטע לא טוען שאנשים חושבים כך.',2:'זה נכון לגבי הצמחים, אבל לא זה מה שהמילה "גם" באה להדגיש.',3:'הקטע לא עוסק בחיות שאוכלות צמחים.'},ex:'המילה "גם" מדגישה הפתעה: אנחנו רגילים לחשוב שרק <b>בעלי חיים</b> טורפים – והנה יש גם צמחים טורפים.'},
+  {l:'שאלה 3',a:3,w:{0:'זה לא מה שמתואר בשורה 11.',1:'נכון שחרקים נתקעים – אבל הדבר המדהים הוא שהם נמשכים דווקא אל העלים היפים, שהם בעצם המלכודת.',2:'הקטע לא מדבר על הריח של הטיפות.'},ex:'כדאי לקרוא שוב את השורות שלפני שורה 11: העלים נראים יפים ונוצצים, והחרקים מגיעים אליהם ונדבקים. הדבר המדהים הוא שהיופי עצמו הוא המלכודת.'},
+  {l:'שאלה 4',a:0,w:{1:'גודל ויופי מוזכרים במקום אחר בקטע – לא זו הסיבה שמספרים על גידול בבית.',2:'הקטע לא אומר שמגדלים אותם כדי להיפטר מיתושים וזבובים.',3:'הקטע לא מדבר על צמחים אחרים.'},ex:'אם אנשים מגדלים את הצמח בבית, סימן שהוא לא מסוכן לבני אדם. זו המטרה של המשפט.'},
+  {l:'שאלה 5',a:2,w:{0:'הקטע כן עונה על זה – חפשי בתחילת הקטע.',1:'הקטע כן עונה על זה.',3:'הקטע כן מסביר איך הטללית לוכדת חרקים.'},ex:'בשאלה מסוג "על איזו שאלה <b>אין</b> תשובה" בודקים כל תשובה מול הקטע. על שלוש מהן יש תשובה בקטע – אבל הקטע לא מספר באילו אזורים הטללית גדולה.'}]},
+ {name:'הבנת הנקרא – "הקסם של הלילה"',cat:'reading',items:[
+  {l:'שאלה 1',a:2,w:{0:'זו לא הסיבה שיונתן נותן.',1:'יונתן לא מדבר על חלומות כסיבה.',3:'יונתן לא משווה בין מבוגרים לילדים.'},ex:'יונתן חושב ששינה היא בזבוז זמן כי במקום לישון אפשר לעשות דברים אחרים.'},
+  {l:'שאלה 2',a:0,w:{1:'הוא לא מספר כדי להזכיר משהו – יש לו מטרה.',2:'הוא לא מתאר משהו שכבר ראה.',3:'זה לא מה שהוא מנסה להשיג.'},ex:'יונתן מספר להורים כמה הלילה מעניין, כי הוא רוצה לשכנע אותם לתת לו להישאר ער.'},
+  {l:'שאלה 3',a:3,w:{0:'"צץ" לא קשור לריצה.',1:'"צץ" לא קשור לזריקה.',2:'"צץ" הוא דווקא ההפך מבריחה.'},ex:'"צץ" = הופיע פתאום (כמו פרח שצץ מהאדמה).'},
+  {l:'שאלה 4',a:3,w:{0:'גם ביום יש רוח.',1:'הקור לא עוזר לשמוע.',2:'זה לא מה שמוסבר בסיפור.'},ex:'בלילה שקט – ולכן אפשר לשמוע קולות שביום לא שומעים, כמו הרוח.'},
+  {l:'שאלה 5',a:2,w:{0:'המילה "גם" מתייחסת למישהו מסוים בסיפור.',1:'כדאי לקרוא שוב את השורה ולבדוק למי עוד היא מתייחסת.',3:'ההורים לא נשארים ערים בלילה בסיפור.'},ex:'"גם" מחבר בין שני דברים דומים. הינשוף ער בלילה – <b>וגם</b> יונתן רוצה להיות ער בלילה. לכן "גם" מתייחס ליונתן.'},
+  {l:'שאלה 6',a:1,w:{0:'כדאי לבדוק בסוף הסיפור מה יונתן רוצה לעשות.',2:'יונתן לא משנה את דעתו על השינה בסוף.',3:'לא כתוב שהוא היה עייף כל הלילה.'},ex:'בסוף הסיפור יונתן שוכב ומחייך כי הוא רוצה לגלות מה קורה בלילה.'},
+  {l:'שאלה 7',a:2,w:{0:'שתי המילים האלה כן דומות במשמעות.',1:'שתי המילים האלה כן דומות במשמעות.',3:'שתי המילים האלה כן דומות במשמעות.'},ex:'צריך למצוא את הזוג שהמילים בו <b>לא</b> דומות. בשלושה זוגות המילים אומרות כמעט אותו דבר – בזוג ג\' הן לא.'}]},
+ {name:'חשבון – משימה א: תרגילים',cat:'exercise',items:[
+  {l:'תרגיל א',t:'num',ans:80,m:[{v:70,msg:'שכחת להעביר עשרת: 8 + 2 = 10, אז 1 עובר לעשרות.'},{v:710,msg:'כתבת 10 באחדות. צריך לרשום 0 ולהעביר 1 לעשרות.'}],ex:`${eq('28 + 52')}: קודם עשרות ${eq('20 + 50 = 70')}, אחר כך אחדות ${eq('8 + 2 = 10')}. ביחד ${eq('70 + 10 = 80')}.`},
+  {l:'תרגיל ב',t:'num',ans:19,m:[{v:21,msg:'בכל עמודה הורדת את הקטן מהגדול. אבל 7 קטן מ-8, אז צריך לפרוט עשרת.'},{v:55,msg:'חיברת במקום לחסר.'}],ex:`${eq('37 − 18')}: מורידים קודם 10: ${eq('37 − 10 = 27')}, ואז עוד 8: ${eq('27 − 8 = 19')}.`},
+  {l:'תרגיל ג',t:'num',ans:24,m:[{v:11,msg:'חיברת במקום לכפול.'}],ex:`${eq('3 × 8')} = שלוש קבוצות של 8: ${eq('8 + 8 + 8 = 24')}.`}]},
+ {name:'חשבון – משימה ב: המספר החסר',cat:'missing',items:[
+  {l:'תרגיל א',t:'num',ans:15,m:[{v:109,msg:'חיברת את שני המספרים, אבל 62 הוא כבר התוצאה.'}],ex:`כמה חסר מ-47 עד 62? ${eq('62 − 47 = 15')}. בדיקה: ${eq('47 + 15 = 62')} ✓`},
+  {l:'תרגיל ב',t:'num',ans:71,m:[{v:93,msg:'חיברת. אבל מ-82 מורידים משהו ונשארים עם 11 – אז המספר החסר קטן מ-82.'}],ex:`כמה צריך להוריד מ-82 כדי להגיע ל-11? ${eq('82 − 11 = 71')}. בדיקה: ${eq('82 − 71 = 11')} ✓`},
+  {l:'תרגיל ג',t:'num',ans:6,m:[{v:30,msg:'חיסרת 6 מ-36, אבל זה תרגיל כפל.'},{v:42,msg:'חיברת, אבל זה תרגיל כפל.'}],ex:`איזה מספר כפול 6 שווה 36? ${eq('6 × 6 = 36')}, ולכן התשובה 6.`},
+  {l:'תרגיל ד',t:'num',check:x=>x>15,txt:'כל מספר גדול מ-15 (למשל 16)',m:[{v:15,msg:'עם 15 שני הצדדים <b>שווים</b>. צריך שהצד עם החסר יהיה <b>גדול</b> יותר.'}],ex:`בשני הצדדים מוסיפים 47. כדי שהצד עם המספר החסר יהיה גדול יותר, המספר החסר צריך להיות <b>גדול מ-15</b>. כל מספר כזה נכון – למשל 16 או 20.`},
+  {l:'תרגיל ה',t:'num',check:x=>x<15,txt:'כל מספר קטן מ-15 (למשל 14)',m:[{v:15,msg:'עם 15 שני הצדדים <b>שווים</b>.'}],ex:`בשני הצדדים מורידים מ-87. כדי שבצד עם החסר יישאר <b>יותר</b>, צריך להוריד <b>פחות</b> – כלומר מספר <b>קטן מ-15</b>. כל מספר כזה נכון – למשל 14 או 10.`}]},
+ {name:'חשבון – משימה ג: בעיות מילוליות',cat:'word',items:[
+  {l:'בעיה 1',a:2,w:{0:'8 זה מספר הרגליים של התרנגולות – לא ההפרש.',1:'בדקי שוב: כמה רגליים יש לכבשים וכמה לתרנגולות?',3:'בדקי שוב את הכפל של הכבשים.'},ex:`כבשים: ${eq('5 × 4 = 20')} רגליים. תרנגולות: ${eq('4 × 2 = 8')} רגליים. ההפרש: ${eq('20 − 8 = 12')}.`},
+  {l:'בעיה 2',a:3,w:{0:'זה המצב אחרי סיבוב אחד בלבד. היו 3 סיבובים.',1:'בכל סיבוב עוברים 2 קלפים, אז ההפרש משתנה בזוגות.',2:'זה המצב אחרי שני סיבובים. היו 3.'},ex:`בכל סיבוב עוברים 2 קלפים, ב-3 סיבובים: ${eq('3 × 2 = 6')}.<br>לאחת: ${eq('26 − 6 = 20')}, לשנייה: ${eq('26 + 6 = 32')}.`},
+  {l:'בעיה 3',a:1,w:{0:'בדקי כמה ביצים נכנסות בשתי התבניות ביחד.',2:`בדקי שוב: ${eq('2 × 12')}.`,3:`בדקי שוב: ${eq('2 × 12')}.`},ex:`בשתי תבניות: ${eq('2 × 12 = 24')} ביצים. לא נכנסות: ${eq('30 − 24 = 6')}.`}]},
+ {name:'חשבון – משימה ד: חידות בציורים',cat:'symbols',items:[
+  {l:'חידה 1',a:3,w:{0:'זה הערך של הצורה שמופיעה פעמיים, לא של הצורה ששואלים עליה.',1:'בדקי שוב: כמה שוות שתי הצורות הזהות ביחד?',2:'6 זה שתי הצורות הזהות ביחד. צריך את מה שנשאר.'},ex:`מהשורה הראשונה: שתי צורות זהות = 6, אז כל אחת = 3.<br>בשורה השנייה: ${eq('6 + ? = 14')}, ולכן הצורה החדשה = ${eq('14 − 6 = 8')}.`},
+  {l:'חידה 2',a:2,w:{0:'בדקי שוב את החיסור בסוף.',1:'4 זה הערך של הצורה שמופיעה פעמיים בשורה הראשונה.',3:'8 זה התוצאה של השורה הראשונה.'},ex:`מהשורה הראשונה: ${eq('8 ÷ 2 = 4')}.<br>בשורה השנייה: ${eq('4 + ? = 10')}, ולכן ${eq('? = 6')}.`},
+  {l:'חידה 3',a:0,w:{1:'4 זה כמה צורות זהות יש – לא הערך של כל אחת.',2:'בדקי שוב את החילוק לארבעה.',3:'8 זה ארבע הצורות הזהות <b>ביחד</b>. צריך לחלק ל-4.'},ex:`שתי הצורות מהשורה הראשונה שוות ביחד 19. בשורה השנייה הן מופיעות שוב, אז:<br>${eq('27 − 19 = 8')} – וזה ארבע צורות זהות.<br>${eq('8 ÷ 4 = 2')}.`}]}
+ ]}];
+function officialQs(T){const qs=[];T.sections.forEach(S=>S.items.forEach(it=>{
+  const q={official:true,cat:S.cat,sec:S.name,label:it.l,q:`<b>${S.name}</b> · ${it.l}`,explain:it.ex,hint:''};
+  if(it.t==='num'){q.kind='num';q.answer=it.ans;q.check=it.check;q.answerText=it.txt;q.mistakes=it.m||[]}
+  else{q.kind='mc';q.options=['','','',''];q.correct=it.a;q.why=[0,1,2,3].map(i=>i===it.a?null:((it.w||{})[i]||'כדאי לחזור לקטע או לשאלה ולבדוק שוב.'))}
+  qs.push(q)}));return qs}
+SCREENS.official=()=>{
+  const done=ST.results.filter(r=>r.mode==='official');
+  app.innerHTML=`<section class="card"><h2>📄 מבחן רשמי</h2>
+   <p class="muted">כאן פותרים את המבחן האמיתי שמשרד החינוך פרסם. המבחן עצמו נפתח מהאתר של משרד החינוך – מומלץ להדפיס אותו. ${esc(CH())} פותרת על הדף, ומסמנת כאן את התשובות. בסוף האתר בודק לפי מפתח התשובות הרשמי ומסביר כל טעות.</p>
+   ${OFFICIAL.map(T=>{const mine=done.filter(r=>r.test===T.id);const last=mine[mine.length-1];return `<div class="genq"><b style="font-size:19px">${T.title}</b><div class="small muted">${T.src} · ${officialQs(T).length} שאלות: הבנת הנקרא וחשבון${last?` · ציון אחרון: <span class="eq">${Math.round(100*last.correct/last.total)}%</span>`:''}</div>
+    <div class="row" style="margin-top:10px"><a class="btn ghost small" href="${T.pdf}" target="_blank" rel="noopener">📄 פתיחת המבחן (PDF)</a></div>
+    <div class="row" style="margin-top:10px"><label>זמן בדקות: <input type="number" class="omins" data-t="${T.id}" min="10" max="120" value="${T.mins}" style="width:90px;display:inline-block"></label><button class="btn pink" data-start="${T.id}">להתחיל – דף תשובות</button></div>
+    <details class="small" style="margin-top:8px"><summary>להורים</summary>משך המבחן לא מצוין בקובץ הרשמי, אז אפשר לקבוע זמן לבד. <a href="${T.key}" target="_blank" rel="noopener">מפתח התשובות הרשמי</a> (כדאי לא להראות לפני הפתרון 🙂). ההסברים לטעויות נכתבו כאן, ואינם של משרד החינוך.</details></div>`}).join('')}
+   <div class="row" style="margin-top:14px"><button class="btn ghost" id="back">לבית</button></div></section>`;
+  $('#back').onclick=()=>go('home');
+  app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{const T=OFFICIAL.find(t=>t.id===b.dataset.start);const m=Math.max(10,Math.min(120,+app.querySelector(`.omins[data-t="${T.id}"]`).value||T.mins));startOfficial(T,m)});
+};
+function startOfficial(T,mins){
+  const qs=officialQs(T);
+  QZ={mode:'official',test:T,qs,i:0,ans:qs.map(()=>null),secs:qs.map(()=>0),t0:Date.now(),limit:mins*60,qStart:Date.now(),done:false};
+  timerId=setInterval(tick,1000);window.scrollTo(0,0);setHash('quiz');renderSheet();
+}
+function renderSheet(){
+  const T=QZ.test;let n=0;
+  app.innerHTML=`<section class="card">
+   <div class="qbar"><span class="tag">📄 דף תשובות</span><div class="prog"><i id="sheetProg" style="width:0%"></i></div><span class="timer" id="timer">${fmtTime(QZ.limit-elapsed())}</span></div>
+   <div class="note">פותרים על דף המבחן, ומסמנים כאן. <a href="${T.pdf}" target="_blank" rel="noopener">📄 פתיחת המבחן</a></div>
+   ${T.sections.map(S=>`<h3>${S.name}</h3>${S.items.map(it=>{const i=n++;const q=QZ.qs[i];return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><b>${it.l}</b>${q.kind==='mc'?`<div class="chips" data-q="${i}">${LET.slice(0,4).map((L,j)=>`<button class="chip" data-o="${j}" style="min-width:46px">${L}</button>`).join('')}</div>`:`<input class="sheetNum" data-q="${i}" inputmode="numeric" autocomplete="off" style="width:110px;text-align:center;direction:ltr;font-size:22px;font-weight:700" aria-label="${esc(S.name+' '+it.l)}">`}</div>`}).join('')}`).join('')}
+   <div class="row between" style="margin-top:16px"><button class="btn ghost small" id="quitS">יציאה</button><button class="btn pink" id="submitS">הגשת המבחן ✓</button></div></section>`;
+  const prog=()=>{const k=QZ.ans.filter(a=>a&&a.given!=null&&a.given!=='').length;$('#sheetProg').style.width=Math.round(100*k/QZ.qs.length)+'%'};
+  app.querySelectorAll('.chips[data-q]').forEach(g=>g.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const i=+g.dataset.q;QZ.ans[i]={given:+b.dataset.o};g.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===b));prog()}));
+  app.querySelectorAll('.sheetNum').forEach(inp=>inp.oninput=()=>{inp.value=inp.value.replace(/[^0-9]/g,'').slice(0,4);QZ.ans[+inp.dataset.q]={given:inp.value};prog()});
+  $('#quitS').onclick=()=>leaveQuiz('official');
+  $('#submitS').onclick=()=>{const left=QZ.ans.filter(a=>!a||a.given==null||a.given==='').length;confirmBox(left?`נשארו ${left} שאלות בלי תשובה. להגיש בכל זאת?`:'להגיש את המבחן?',()=>finishOfficial(false))};
+}
+function finishOfficial(timeout){
+  if(!QZ||QZ.done)return;QZ.done=true;stopTimer();
+  const used=Math.min(elapsed(),QZ.limit);
+  QZ.qs.forEach((q,i)=>{const g=QZ.ans[i]?QZ.ans[i].given:null;QZ.ans[i]={given:g,ok:g!=null&&g!==''&&isRight(q,g)}});
+  const idx=QZ.qs.map((_,i)=>i),total=idx.length,correct=idx.filter(i=>QZ.ans[i].ok).length;
+  const cats={};idx.forEach(i=>{const c=QZ.qs[i].cat;cats[c]=cats[c]||[0,0];cats[c][1]++;if(QZ.ans[i].ok)cats[c][0]++});
+  Store.addResult({mode:'official',test:QZ.test.id,at:new Date().toISOString(),total,correct,sec:Math.round(used),limit:QZ.limit,cats,timeout:!!timeout});
+  setHash('results',true);window.scrollTo(0,0);renderResults(idx,total,correct,used,timeout);
 }
 
 /* ================= progress ================= */
@@ -1017,7 +1100,7 @@ function lineChart(pts,{max=100,unit='',label=''}){
 function wireTips(){const tip=$('#tip');app.querySelectorAll('[data-tip]').forEach(el=>{el.addEventListener('mousemove',e=>{tip.style.display='block';tip.textContent=el.dataset.tip;tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-36)+'px'});el.addEventListener('mouseleave',()=>tip.style.display='none');el.addEventListener('click',e=>{tip.style.display='block';tip.textContent=el.dataset.tip;tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-36)+'px'})})}
 const dShort=iso=>{const d=new Date(iso);return `${d.getDate()}.${d.getMonth()+1}`};
 SCREENS.progress=()=>{
-  const R=ST.results,T=R.filter(r=>r.mode==='timed');
+  const R=ST.results,T=R.filter(r=>r.mode==='timed'||r.mode==='official');
   const avg=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
   const pcts=T.map(r=>100*r.correct/r.total);
   const allQ=R.reduce((s,r)=>s+r.total,0),allOk=R.reduce((s,r)=>s+r.correct,0);
@@ -1032,11 +1115,11 @@ SCREENS.progress=()=>{
      <div class="stat"><b><span class="eq">${imp==null?'—':(imp>0?'+':'')+imp+'%'}</span></b><span>${imp==null?'שיפור (אחרי 4 מבחנים)':'שיפור: 3 אחרונים מול 3 ראשונים'}</span></div>
      <div class="stat"><b>${allQ}</b><span>שאלות שנפתרו · ${allQ?Math.round(100*allOk/allQ):0}% נכון</span></div>
    </div>
-   <h3>ציון במבחנים על זמן</h3><div class="chart">${lineChart(T.map(r=>({x:dShort(r.at),v:Math.round(100*r.correct/r.total),tip:`${dShort(r.at)}: ${Math.round(100*r.correct/r.total)}% (${r.correct}/${r.total})`})),{max:100,unit:'%',label:'ציון באחוזים לפי תאריך'})}</div>
+   <h3>ציון במבחנים על זמן</h3><div class="chart">${lineChart(T.map(r=>({x:dShort(r.at),v:Math.round(100*r.correct/r.total),tip:`${dShort(r.at)}${r.mode==='official'?' (מבחן רשמי)':''}: ${Math.round(100*r.correct/r.total)}% (${r.correct}/${r.total})`})),{max:100,unit:'%',label:'ציון באחוזים לפי תאריך'})}</div>
    <h3>שניות בממוצע לשאלה (פחות = מהיר יותר)</h3><div class="chart">${(()=>{const pts=T.map(r=>({x:dShort(r.at),v:Math.round(r.sec/r.total),tip:`${dShort(r.at)}: ${Math.round(r.sec/r.total)} שניות לשאלה`}));const mx=Math.max(60,...pts.map(p=>p.v));return lineChart(pts,{max:Math.ceil(mx/30)*30,label:'שניות לשאלה לפי תאריך'})})()}</div>
    <h3>הצלחה לפי נושא (כל האימונים)</h3><div class="bars">${Object.entries(cs).sort((a,b)=>a[1][0]/a[1][1]-b[1][0]/b[1][1]).map(([c,[o,t]])=>`<div class="b" data-tip="${esc((CATS[c]?.name||c)+': '+o+' מתוך '+t)}"><span>${CATS[c]?.ic||''} ${CATS[c]?.name||c}</span><div class="track"><div class="fill" style="width:${Math.round(100*o/t)}%"></div></div><span class="v">${Math.round(100*o/t)}%</span></div>`).join('')}</div>
    ${weakCats().length?`<div class="note" style="margin-top:12px">💡 כדאי לחזק: <b>${weakCats().map(c=>CATS[c].name).join(', ')}</b>. <button class="btn small" id="smart" style="margin-right:8px">תרגול חכם</button></div>`:''}
-   <h3>היסטוריה</h3><table><tr><th>תאריך</th><th>סוג</th><th class="num">ציון</th><th class="num">זמן</th></tr>${R.slice().reverse().slice(0,30).map(r=>`<tr><td>${new Date(r.at).toLocaleDateString('he-IL')}</td><td>${{timed:'⏱️ מבחן',practice:'🎯 תרגול',review:'🔁 חזרה'}[r.mode]||r.mode}</td><td class="num">${r.correct}/${r.total}</td><td class="num">${fmtTime(r.sec)}${r.limit?' / '+fmtTime(r.limit):''}</td></tr>`).join('')}</table>`
+   <h3>היסטוריה</h3><table><tr><th>תאריך</th><th>סוג</th><th class="num">ציון</th><th class="num">זמן</th></tr>${R.slice().reverse().slice(0,30).map(r=>`<tr><td>${new Date(r.at).toLocaleDateString('he-IL')}</td><td>${{timed:'⏱️ מבחן',official:'📄 מבחן רשמי',practice:'🎯 תרגול',review:'🔁 חזרה'}[r.mode]||r.mode}</td><td class="num">${r.correct}/${r.total}</td><td class="num">${fmtTime(r.sec)}${r.limit?' / '+fmtTime(r.limit):''}</td></tr>`).join('')}</table>`
    :'<p>עוד אין נתונים. אחרי התרגול או המבחן הראשון יופיעו כאן גרפים.</p>'}
    <div class="row" style="margin-top:16px"><button class="btn" id="t">למבחן על זמן</button><button class="btn ghost" id="home">לבית</button></div></section>`;
   $('#home').onclick=()=>go('home');$('#t').onclick=()=>go('timedSetup');
